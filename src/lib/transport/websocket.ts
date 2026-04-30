@@ -125,7 +125,21 @@ export class WebSocketTransport implements AcpTransport {
 
   private handleMessage(ev: MessageEvent): void {
     if (typeof ev.data === 'string') {
-      this.messageListeners.emit(ev.data);
+      // Frames may carry one or more newline-delimited JSON objects.
+      // Stdio↔WS bridges (e.g. @rebornix/stdio-to-ws) forward the agent's
+      // stdout chunks verbatim, which can contain multiple NDJSON lines in
+      // a single WS message. Split here so each consumer sees exactly one
+      // JSON-RPC frame, matching the stdio transport's behaviour.
+      const data = ev.data;
+      if (data.indexOf('\n') === -1) {
+        const trimmed = data.trim();
+        if (trimmed.length > 0) this.messageListeners.emit(trimmed);
+        return;
+      }
+      for (const line of data.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.length > 0) this.messageListeners.emit(trimmed);
+      }
     } else {
       // Binary frames are not part of ACP. Surface a clear error rather than
       // silently dropping data so misbehaving servers are easy to diagnose.
@@ -151,7 +165,13 @@ export class WebSocketTransport implements AcpTransport {
         `WebSocketTransport not open (readyState=${this.ws.readyState})`
       );
     }
-    this.ws.send(json);
+    // Always terminate frames with '\n'. Native ACP-over-WS servers tolerate
+    // trailing whitespace (JSON.parse / NDJSON readers ignore it), and stdio↔WS
+    // bridges (e.g. @rebornix/stdio-to-ws) forward the WS payload verbatim to
+    // the agent's stdin, which expects newline-delimited JSON. Without this
+    // suffix the child blocks on `readline()` and we time out on `initialize`.
+    const frame = json.endsWith('\n') ? json : json + '\n';
+    this.ws.send(frame);
   }
 
   onMessage(cb: (json: string) => void): Unsubscribe {
