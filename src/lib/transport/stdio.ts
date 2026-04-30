@@ -42,7 +42,20 @@ export class StdioTransport implements AcpTransport {
     this.unlistenClosed = (await onAgentClosed((agentId) => {
       if (agentId === this.agentInstance.id && !this.closed) {
         this.closed = true;
+        // Drop the global Tauri listeners as soon as we know the process is
+        // gone. Without this, repeated unexpected exits would leak a
+        // `tauri://event` subscription per agent lifetime.
+        if (this.unlistenMessage) {
+          this.unlistenMessage();
+          this.unlistenMessage = null;
+        }
+        if (this.unlistenClosed) {
+          this.unlistenClosed();
+          this.unlistenClosed = null;
+        }
         this.closeListeners.emit('agent process exited');
+        this.messageListeners.clear();
+        this.closeListeners.clear();
       }
     })) as unknown as () => void;
   }

@@ -7,7 +7,7 @@ import { trackEvent, trackError } from '../lib/telemetry';
 import type { SavedSession, ChatMessage, ToolCallInfo, PermissionRequest, SessionMode, SlashCommand, ModelInfo, AgentConfig } from '../lib/types';
 import { getTransportKind } from '../lib/types';
 import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
-import { onAgentStderr, spawnAgent } from '../lib/tauri';
+import { onAgentStderr, spawnAgent, killAgent } from '../lib/tauri';
 import { useConfigStore } from './config';
 import type { SessionNotification, AuthMethod } from '@agentclientprotocol/sdk';
 
@@ -107,6 +107,21 @@ export const useSessionStore = defineStore('session', () => {
       await store.set('sessions', savedSessions.value);
       await store.save();
     }
+  }
+
+  // Handle an unexpected transport close (e.g. WebSocket dropped while idle,
+  // local agent process exited). The bridge has already rejected any
+  // in-flight requests; we just need to tear down UI state so the user gets
+  // a clear "disconnected" signal instead of a stale "connected" view.
+  function handleUnexpectedClose(reason?: string): void {
+    // If `acpClient` is already null, this fired during a voluntary
+    // disconnect that's tearing down anyway — nothing to do.
+    if (!acpClient) return;
+    acpClient = null;
+    isConnected.value = false;
+    isLoading.value = false;
+    pendingPermission.value = null;
+    error.value = `Connection lost: ${reason ?? 'transport closed'}`;
   }
 
   // Session update handler
@@ -288,6 +303,12 @@ export const useSessionStore = defineStore('session', () => {
       startupElapsed.value++;
     }, 1000);
 
+    // Track the spawned stdio instance separately so we can `killAgent` it
+    // if cancellation/abort happens before we've wrapped it in a bridge.
+    // Once `acpClient` is set, ownership transfers to the bridge and
+    // `acpClient.disconnect()` becomes the only correct cleanup path.
+    let spawnedInstance: { id: string } | null = null;
+
     try {
       if (!agentConfig) {
         throw new Error(`Agent '${agentName}' not found in config`);
@@ -300,6 +321,7 @@ export const useSessionStore = defineStore('session', () => {
         // a StdioTransport, then build the bridge from that transport.
         startupPhase.value = 'starting';
         const agentInstance = await spawnAgent(agentName);
+        spawnedInstance = agentInstance;
 
         stderrUnlisten = await onAgentStderr((stderr) => {
           if (stderr.agent_id !== agentInstance.id) return;
@@ -312,6 +334,12 @@ export const useSessionStore = defineStore('session', () => {
         }) as unknown as () => void;
 
         if (connectionAborted) {
+          // Process was spawned but no bridge exists yet — kill the orphan
+          // before throwing so the local agent doesn't keep running.
+          await killAgent(agentInstance.id).catch((err) =>
+            console.warn('killAgent during abort failed:', err)
+          );
+          spawnedInstance = null;
           throw new Error('Connection cancelled');
         }
 
@@ -321,6 +349,9 @@ export const useSessionStore = defineStore('session', () => {
         // legacy single-arg form keeps backward compatibility and avoids a
         // double-spawn (StdioTransport.spawn would call spawnAgent again).
         acpClient = await createAcpClient(agentInstance);
+        // Ownership of the child process now belongs to the bridge — clear
+        // our local reference so the catch block doesn't double-kill it.
+        spawnedInstance = null;
       } else {
         // Remote agents have no stderr stream; show a minimal "connecting"
         // state instead of the multi-phase progress UI.
@@ -336,6 +367,11 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       acpClient.onSessionUpdate = handleSessionUpdate;
+      // Surface unexpected transport closes (e.g. WebSocket drop while idle)
+      // to the UI so users don't sit on a stale "connected" state forever.
+      acpClient.onTransportClose = (reason) => {
+        handleUnexpectedClose(reason);
+      };
       
       // Sync bridge's pendingPermissionRequest to store's pendingPermission
       watch(
@@ -482,6 +518,23 @@ export const useSessionStore = defineStore('session', () => {
 
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
+      // Tear down whichever side of the connection is live. The bridge owns
+      // the spawned process once it exists, so prefer disconnecting it.
+      // Otherwise (e.g. abort right after spawn but before bridge creation)
+      // kill the orphaned local agent directly.
+      if (acpClient) {
+        try {
+          await acpClient.disconnect();
+        } catch (cleanupErr) {
+          console.warn('disconnect during createSession cleanup failed:', cleanupErr);
+        }
+      } else if (spawnedInstance) {
+        try {
+          await killAgent(spawnedInstance.id);
+        } catch (cleanupErr) {
+          console.warn('killAgent during createSession cleanup failed:', cleanupErr);
+        }
+      }
       acpClient = null;
       // Track session creation failure
       trackEvent('SessionCreated', { agentName, success: 'false' });
@@ -520,7 +573,13 @@ export const useSessionStore = defineStore('session', () => {
         config: agentConfig,
       });
       acpClient.onSessionUpdate = handleSessionUpdate;
-      
+      // Surface unexpected transport closes (e.g. WebSocket dropped while idle,
+      // local agent process crashed) so the UI doesn't sit on a stale
+      // "connected" view forever.
+      acpClient.onTransportClose = (reason) => {
+        handleUnexpectedClose(reason);
+      };
+
       // Sync bridge's pendingPermissionRequest to store's pendingPermission
       watch(
         () => acpClient?.pendingPermissionRequest.value,
@@ -607,6 +666,17 @@ export const useSessionStore = defineStore('session', () => {
 
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
+      // Disconnect the bridge if it was created — otherwise we leak the
+      // spawned stdio process or open WebSocket on initialize/loadSession
+      // failure.
+      if (acpClient) {
+        try {
+          await acpClient.disconnect();
+        } catch (cleanupErr) {
+          console.warn('disconnect during resumeSession cleanup failed:', cleanupErr);
+        }
+        acpClient = null;
+      }
       // Track session resume failure
       trackEvent('SessionResumed', { agentName: savedSession.agentName, success: 'false' });
       trackError(e instanceof Error ? e : new Error(String(e)));

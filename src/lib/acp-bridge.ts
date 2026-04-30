@@ -106,6 +106,12 @@ export class AcpClientBridge implements Client {
   }
 
   async disconnect(): Promise<void> {
+    // Unlisten first so the transport's close handler (which would re-reject
+    // pending requests and fire `onTransportClose`) doesn't run for a
+    // voluntary disconnect — `onTransportClose` is reserved for unexpected
+    // closes. Then explicitly reject any in-flight requests here so callers
+    // don't hang waiting for responses that will never arrive, and finally
+    // close the transport.
     if (this.unlistenMessage) {
       this.unlistenMessage();
       this.unlistenMessage = null;
@@ -113,6 +119,19 @@ export class AcpClientBridge implements Client {
     if (this.unlistenClose) {
       this.unlistenClose();
       this.unlistenClose = null;
+    }
+    if (this.messageRejecters.size > 0) {
+      const err = new Error('transport closed: client disconnected');
+      for (const reject of this.messageRejecters.values()) {
+        try {
+          reject(err);
+        } catch {
+          /* ignore */
+        }
+      }
+      this.messageResolvers.clear();
+      this.messageRejecters.clear();
+      this.pendingMethods.clear();
     }
     await this.transport.close();
   }
