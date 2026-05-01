@@ -241,7 +241,7 @@ jobs:
         # Debug builds are signed with the Android debug keystore so they
         # install without a release-keystore setup. Sufficient for sideload
         # distribution; Play Store would require a release keystore.
-        run: npm run tauri android build -- --debug --apk
+        run: npm run tauri android build -- --debug --apk true
 
       - name: Stage APK with versioned name
         id: apk
