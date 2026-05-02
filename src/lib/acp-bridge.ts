@@ -23,11 +23,11 @@ import type {
   AuthenticateRequest,
   AuthenticateResponse,
 } from '@agentclientprotocol/sdk';
-import { readTextFile as tauriReadTextFile, writeTextFile as tauriWriteTextFile } from '@tauri-apps/plugin-fs';
+import { readTextFile as hostReadTextFile, writeTextFile as hostWriteTextFile } from './host';
 import type { AcpTransport, Unsubscribe } from './transport/types';
-import { createTransport, StdioTransport } from './transport';
+import { createTransport } from './transport';
 import type { AgentConfig, AgentInstance, PermissionRequest as LocalPermissionRequest } from './types';
-import { isMobile } from './platform';
+import { hasLocalFs } from './platform';
 import { ref, type Ref } from 'vue';
 import { useTrafficStore } from '../stores/traffic';
 
@@ -74,9 +74,9 @@ export class AcpClientBridge implements Client {
 
   constructor(transport: AcpTransport, options?: { fsAvailable?: boolean }) {
     this.transport = transport;
-    // Default: fs is available iff we are on desktop. Callers (e.g. remote
-    // agents that trust the host fs) can override.
-    this.fsAvailable = options?.fsAvailable ?? !isMobile();
+    // Default: fs is available iff we are on Tauri desktop. Callers (e.g.
+    // remote agents that trust the host fs) can override.
+    this.fsAvailable = options?.fsAvailable ?? hasLocalFs();
     this.unlistenMessage = this.transport.onMessage((msg) => this.handleMessage(msg));
     this.unlistenClose = this.transport.onClose((reason) => {
       // Reject all in-flight requests so callers stop hanging.
@@ -410,7 +410,7 @@ export class AcpClientBridge implements Client {
     params: WriteTextFileRequest
   ): Promise<WriteTextFileResponse> {
     try {
-      await tauriWriteTextFile(params.path, params.content);
+      await hostWriteTextFile(params.path, params.content);
       console.log('writeTextFile completed:', params.path);
       return {};
     } catch (e) {
@@ -423,7 +423,7 @@ export class AcpClientBridge implements Client {
     params: ReadTextFileRequest
   ): Promise<ReadTextFileResponse> {
     try {
-      let content = await tauriReadTextFile(params.path);
+      let content = await hostReadTextFile(params.path);
 
       // Handle line/limit parameters if specified
       if (params.line !== undefined || params.limit !== undefined) {
@@ -448,7 +448,8 @@ export class AcpClientBridge implements Client {
  *
  * For backward compatibility, the legacy single-argument form (passing an
  * `AgentInstance` for an already-spawned stdio process) is still accepted and
- * routes through a freshly attached `StdioTransport`.
+ * routes through a freshly attached `StdioTransport`. The stdio transport
+ * is lazy-imported so it never lands in the web bundle.
  */
 export async function createAcpClient(
   arg: AgentInstance | { name: string; config: AgentConfig },
@@ -460,6 +461,7 @@ export async function createAcpClient(
   }
   // Legacy path: caller already invoked spawnAgent and just wants us to wire
   // up the events.
+  const { StdioTransport } = await import('./transport/stdio');
   const transport = new StdioTransport(arg);
   await transport.attach();
   return new AcpClientBridge(transport, options);

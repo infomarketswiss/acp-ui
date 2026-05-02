@@ -3,8 +3,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { AgentsConfig, AgentConfig, AgentTransportKind } from '../lib/types';
 import { getTransportKind } from '../lib/types';
-import { isMobile } from '../lib/platform';
-import { getConfig, reloadConfig, getConfigPath, onConfigChanged } from '../lib/tauri';
+import { restrictedTransports } from '../lib/platform';
+import { getConfig, reloadConfig, getConfigPath, onConfigChanged } from '../lib/host';
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<AgentsConfig>({ agents: {} });
@@ -12,13 +12,13 @@ export const useConfigStore = defineStore('config', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  // Stdio agents are listed in the raw config but cannot run on mobile
-  // builds (no subprocess). Filter them out so the UI never offers an
+  // Stdio agents are listed in the raw config but cannot run on mobile or
+  // web builds (no subprocess). Filter them out so the UI never offers an
   // option that immediately fails.
   const allAgentNames = computed(() => Object.keys(config.value.agents));
 
   const agentNames = computed(() => {
-    if (!isMobile()) return allAgentNames.value;
+    if (!restrictedTransports()) return allAgentNames.value;
     return allAgentNames.value.filter(
       (name) => getTransportKind(config.value.agents[name]) !== 'stdio'
     );

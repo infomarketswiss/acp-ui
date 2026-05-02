@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useConfigStore } from '../stores/config';
-import { isMobile } from '../lib/platform';
+import { restrictedTransports } from '../lib/platform';
 
 const emit = defineEmits<{
   select: [agentName: string];
@@ -14,9 +14,9 @@ const selectedAgent = defineModel<string>('selected', { default: '' });
 const agents = computed(() => configStore.agentNames);
 const hasAgents = computed(() => configStore.hasAgents);
 const configPath = computed(() => configStore.configPath);
-// On mobile the config-file path is not actionable (sandbox path, no
-// external editor). We point users at the Settings dialog instead.
-const mobile = isMobile();
+// On mobile / web the config-file path is not actionable (sandbox /
+// localStorage). Point users at the Settings dialog instead of the path.
+const restricted = restrictedTransports();
 
 /** Build the display label for each agent once, instead of calling
  * `getAgentTransportKind` twice per option in the template. */
@@ -64,7 +64,7 @@ function handleSelect(event: Event) {
     </select>
     
     <div v-if="!hasAgents" class="config-hint">
-      <template v-if="mobile">
+      <template v-if="restricted">
         <p>No remote agents configured.</p>
         <p class="hint-action">Open Settings (⚙) to add one.</p>
       </template>

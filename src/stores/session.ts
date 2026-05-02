@@ -1,13 +1,13 @@
 // Session store for managing ACP sessions and persistence
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import { load, Store } from '@tauri-apps/plugin-store';
-import { getVersion } from '@tauri-apps/api/app';
+import { loadKvStore, type KVStore } from '../lib/host/storage';
+import { getAppVersion } from '../lib/host';
 import { trackEvent, trackError } from '../lib/telemetry';
 import type { SavedSession, ChatMessage, ToolCallInfo, PermissionRequest, SessionMode, SlashCommand, ModelInfo, AgentConfig } from '../lib/types';
 import { getTransportKind } from '../lib/types';
 import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
-import { onAgentStderr, spawnAgent, killAgent } from '../lib/tauri';
+import { onAgentStderr, spawnAgent, killAgent } from '../lib/host';
 import { useConfigStore } from './config';
 import type { SessionNotification, AuthMethod } from '@agentclientprotocol/sdk';
 
@@ -80,7 +80,7 @@ export const useSessionStore = defineStore('session', () => {
   
   // Current ACP client
   let acpClient: AcpClientBridge | null = null;
-  let store: Store | null = null;
+  let store: KVStore | null = null;
 
   // Computed
   const hasActiveSession = computed(() => currentSession.value !== null);
@@ -93,15 +93,15 @@ export const useSessionStore = defineStore('session', () => {
 
   // Initialize store
   async function initStore() {
-    store = await load(STORE_PATH);
+    store = await loadKvStore(STORE_PATH);
     const saved = await store.get<SavedSession[]>('sessions');
     if (saved) {
       savedSessions.value = saved;
     }
     
-    // Load app version from Tauri
+    // Load app version (Tauri API on desktop/mobile, build-time inject on web)
     try {
-      appVersion = await getVersion();
+      appVersion = await getAppVersion();
     } catch (e) {
       console.warn('Failed to get app version:', e);
     }

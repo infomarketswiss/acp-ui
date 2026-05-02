@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { open } from '@tauri-apps/plugin-dialog';
-import { load } from '@tauri-apps/plugin-store';
+import { canPickFolder, pickFolder, loadKvStore, type KVStore } from './lib/host';
 import { useConfigStore } from './stores/config';
 import { useSessionStore } from './stores/session';
 import { initTelemetry } from './lib/telemetry';
-import { isMobile } from './lib/platform';
 import AgentSelector from './components/AgentSelector.vue';
 import SessionList from './components/SessionList.vue';
 import ChatView from './components/ChatView.vue';
@@ -21,10 +19,10 @@ const sessionStore = useSessionStore();
 
 const selectedAgent = ref('');
 const selectedCwd = ref('');
-// On mobile there is no native folder picker (and the cwd refers to a path
-// on the *agent's* machine, not the phone), so we expose a free-text field
-// instead of the picker button.
-const mobile = isMobile();
+// On mobile / web there is no native folder picker (and the cwd refers to
+// a path on the *agent's* machine, not the local device), so we expose a
+// free-text field instead of the picker button.
+const folderPickerAvailable = canPickFolder();
 const showSidebar = ref(true);
 const showSettings = ref(false);
 const showTrafficMonitor = ref(false);
@@ -64,7 +62,7 @@ function handleOnline() {
 }
 
 // Preferences store for persisting user selections
-let prefsStore: Awaited<ReturnType<typeof load>> | null = null;
+let prefsStore: KVStore | null = null;
 
 const isConnected = computed(() => sessionStore.isConnected);
 const isLoading = computed(() => sessionStore.isLoading);
@@ -114,7 +112,7 @@ onMounted(async () => {
   }
 
   // Load persisted preferences first
-  prefsStore = await load('preferences.json');
+  prefsStore = await loadKvStore('preferences.json');
   
   // Initialize telemetry (check user preference)
   const telemetryEnabled = await prefsStore.get<boolean>('telemetryEnabled') ?? true;
@@ -147,26 +145,24 @@ async function handleAgentSelect(agentName: string) {
 }
 
 async function handleSelectFolder() {
-  const folder = await open({
-    directory: true,
-    multiple: false,
-    title: 'Select Working Directory',
-  });
+  const folder = await pickFolder('Select Working Directory');
   if (folder) {
-    selectedCwd.value = folder as string;
+    selectedCwd.value = folder;
     // Persist the selection
     if (prefsStore) {
       await prefsStore.set('lastCwd', folder);
+      await prefsStore.save();
     }
   }
 }
 
-/** Persist a typed cwd as the user edits it (mobile field). */
+/** Persist a typed cwd as the user edits it (mobile / web field). */
 async function handleCwdInput(event: Event) {
   const value = (event.target as HTMLInputElement).value;
   selectedCwd.value = value;
   if (prefsStore) {
     await prefsStore.set('lastCwd', value);
+    await prefsStore.save();
   }
 }
 
@@ -299,7 +295,7 @@ function clearError() {
           <div class="cwd-picker">
             <label>Working Directory:</label>
             <!-- Desktop: read-only display + folder picker. -->
-            <div v-if="!mobile" class="cwd-row">
+            <div v-if="folderPickerAvailable" class="cwd-row">
               <span class="cwd-path" :title="selectedCwd || 'Current directory'">
                 {{ selectedCwd ? selectedCwd.split(/[\\/]/).pop() : '.' }}
               </span>
@@ -312,8 +308,9 @@ function clearError() {
                 📁
               </button>
             </div>
-            <!-- Mobile: free-text input. The cwd is interpreted by the remote
-                 agent, so the path must exist on the agent's machine. -->
+            <!-- Mobile / web: free-text input. The cwd is interpreted by
+                 the remote agent, so the path must exist on the agent's
+                 machine. -->
             <input
               v-else
               class="cwd-input"

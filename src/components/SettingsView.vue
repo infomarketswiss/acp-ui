@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useConfigStore } from '../stores/config';
-import { addAgent, removeAgent, updateAgent } from '../lib/tauri';
+import { addAgent, removeAgent, updateAgent } from '../lib/host';
 import { getTransportKind, type AgentTransportKind } from '../lib/types';
-import { isMobile } from '../lib/platform';
+import { restrictedTransports } from '../lib/platform';
 import EnvVarEditor from './EnvVarEditor.vue';
 
 const emit = defineEmits<{
@@ -22,17 +22,18 @@ interface AgentRow {
   headers: Record<string, string>;
 }
 
-// True on iOS / Android: hide the stdio option in the form, and filter
-// stdio agents out of the list entirely (they can't run there anyway).
-const mobile = isMobile();
+// True on iOS / Android / web: hide the stdio option in the form, and
+// filter stdio agents out of the list entirely (they can't run there
+// anyway).
+const restricted = restrictedTransports();
 
 const agents = computed<AgentRow[]>(() => {
   const entries = Object.entries(configStore.config.agents);
-  // On mobile, hide stdio agents entirely. They can't run there (no
-  // subprocess), and showing them with a disabled Edit button just creates
-  // confusion. The raw entries remain in `agents.json` so a desktop sync
-  // round-trips them losslessly.
-  const filtered = mobile
+  // On restricted hosts (mobile / web), hide stdio agents entirely. They
+  // can't run there (no subprocess), and showing them with a disabled
+  // Edit button just creates confusion. The raw entries remain in the
+  // config so a desktop sync round-trips them losslessly.
+  const filtered = restricted
     ? entries.filter(([, c]) => getTransportKind(c) !== 'stdio')
     : entries;
   return filtered.map(([name, config]) => ({
@@ -50,7 +51,7 @@ const agents = computed<AgentRow[]>(() => {
 const showAddForm = ref(false);
 const editingAgent = ref<string | null>(null);
 const formName = ref('');
-const formTransport = ref<AgentTransportKind>(mobile ? 'websocket' : 'stdio');
+const formTransport = ref<AgentTransportKind>(restricted ? 'websocket' : 'stdio');
 const formCommand = ref('');
 const formArgs = ref('');
 const formEnv = ref<Record<string, string>>({});
@@ -61,7 +62,7 @@ const isSubmitting = ref(false);
 
 function resetForm() {
   formName.value = '';
-  formTransport.value = mobile ? 'websocket' : 'stdio';
+  formTransport.value = restricted ? 'websocket' : 'stdio';
   formCommand.value = '';
   formArgs.value = '';
   formEnv.value = {};
@@ -237,11 +238,11 @@ async function handleDelete(name: string) {
             <div class="form-group">
               <label>Transport</label>
               <select v-model="formTransport">
-                <option v-if="!mobile" value="stdio">stdio (local subprocess)</option>
+                <option v-if="!restricted" value="stdio">stdio (local subprocess)</option>
                 <option value="websocket">websocket (remote)</option>
                 <option value="http">http (remote)</option>
               </select>
-              <small v-if="mobile">stdio is not available on mobile.</small>
+              <small v-if="restricted">stdio is not available on this platform.</small>
             </div>
 
             <template v-if="formTransport === 'stdio'">

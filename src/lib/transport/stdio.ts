@@ -10,7 +10,7 @@ import {
   onAgentMessage,
   sendToAgent,
   spawnAgent,
-} from '../tauri';
+} from '../host';
 import type { AgentInstance } from '../types';
 import { TransportListeners, type AcpTransport, type Unsubscribe } from './types';
 

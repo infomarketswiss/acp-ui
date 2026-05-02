@@ -1,6 +1,6 @@
 // Azure Application Insights telemetry wrapper
 import { ApplicationInsights } from '@microsoft/applicationinsights-web';
-import { getMachineId } from './tauri';
+import { getMachineId } from './host';
 
 let appInsights: ApplicationInsights | null = null;
 let isEnabled = true;
