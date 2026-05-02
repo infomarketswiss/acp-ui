@@ -4,9 +4,15 @@
 	<img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
 </a>
 
-A modern, cross-platform client for the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) on desktop and mobile. Connect to AI coding agents like GitHub Copilot, Claude Code, Gemini CLI, Qwen Code, Codex CLI, OpenCode, OpenClaw, and any ACP-compatible agent from a unified interface.
+A modern, cross-platform client for the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) on desktop, mobile, and the web. Connect to AI coding agents like GitHub Copilot, Claude Code, Gemini CLI, Qwen Code, Codex CLI, OpenCode, OpenClaw, and any ACP-compatible agent from a unified interface.
 
 ![ACP UI Screenshot](assets/screenshot.png)
+
+## 🌍 Try it in your browser
+
+No install required — open **[https://acp-ui.github.io/](https://acp-ui.github.io/)** and connect to a remote ACP agent over WebSocket. The web build supports the same chat, sessions, permissions, and traffic-monitor features as the desktop and mobile apps; it only omits local stdio agents and host filesystem access (which require a local subprocess and aren't available in a browser tab).
+
+> Pages served over HTTPS can only open `wss://` URLs (browser mixed-content rule). For LAN `ws://` access, run the bundle locally (`npm run preview:web`) or use a `wss://` tunnel — see [Connecting from your phone](#-connecting-from-your-phone), the same setup works for the web build.
 
 ## 📥 Installation
 
@@ -14,6 +20,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 
 | Platform | Download |
 |----------|----------|
+| **Web** | [https://acp-ui.github.io/](https://acp-ui.github.io/) — no install, opens in any modern browser |
 | **Windows** | [.msi installer](https://github.com/formulahendry/acp-ui/releases/latest) or [.exe (NSIS)](https://github.com/formulahendry/acp-ui/releases/latest) |
 | **macOS (Apple Silicon)** | [.dmg (ARM64)](https://github.com/formulahendry/acp-ui/releases/latest) |
 | **macOS (Intel)** | [.dmg (x64)](https://github.com/formulahendry/acp-ui/releases/latest) |
@@ -22,14 +29,16 @@ Download the latest release for your platform from [GitHub Releases](https://git
 | **Android** | [.apk](https://github.com/formulahendry/acp-ui/releases/latest) — sideload via "Install unknown apps" |
 | **iOS** | Build from source (see [Building for iOS](#building-for-ios)) — no prebuilt binary |
 
-> Mobile builds connect to remote agents over WebSocket. See [Connecting from your phone](#-connecting-from-your-phone) for how to expose a local agent to your device.
+> Mobile and web builds connect to remote agents over WebSocket. See [Connecting from your phone](#-connecting-from-your-phone) for how to expose a local agent so a phone or browser can reach it.
 
 ## ✨ Features
 
 - **Multi-Agent Support** — Connect to any ACP-compatible agent
 - **Remote agents over WebSocket** — Talk to agents on another machine via `ws://` / `wss://`
+- **Web app** — Run in any modern browser at [acp-ui.github.io](https://acp-ui.github.io/) without installing anything
 - **Mobile** — Android APK shipped on Releases; iOS via local Xcode build
-- **Foreground reconnect** — On mobile, automatically reattaches to your session when you switch back to the app
+- **Foreground reconnect** — On mobile and the web, automatically reattaches to your session when the app/tab regains focus
+- **Idle keep-alive** — Sends a JSON-RPC `$/ping` heartbeat every 25 seconds so NAT/proxy idle timeouts don't drop your WebSocket
 - **Session Management** — Create, resume, and manage conversation sessions
 - **Rich Chat Interface** — Markdown rendering, syntax highlighting, tool call visualization
 - **Slash Commands** — Quick access to agent capabilities with `/command` syntax
@@ -40,7 +49,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 - **Environment Variables** — Configure per-agent environment variables (API keys, settings)
 - **Traffic Monitor** — Debug and inspect ACP protocol messages in real-time
 - **Hot-Reload Config** — Edit agent configurations without restarting (desktop)
-- **Cross-Platform** — Windows, macOS (ARM/Intel), Linux (x64/ARM64), Android, iOS
+- **Cross-Platform** — Web (any modern browser), Windows, macOS (ARM/Intel), Linux (x64/ARM64), Android, iOS
 
 ## 🎯 Default Agents
 
@@ -69,8 +78,9 @@ Agent configurations are stored in:
 | Linux | `~/.config/acp-ui/agents.json` |
 | Android | `/data/data/formulahendry.acp_ui/files/agents.json` (managed via Settings UI) |
 | iOS | App sandbox — managed via Settings UI |
+| Web | Browser `localStorage` (key `acp-ui:agents`) — managed via Settings UI |
 
-> On mobile the config file isn't user-accessible — add and edit agents through the in-app **Settings** dialog. Stdio agents are filtered out of the list since they can't run on a phone.
+> On mobile and the web the config file isn't user-accessible — add and edit agents through the in-app **Settings** dialog. Stdio agents are filtered out of the list since they can't run in a browser or on a phone. Web-app config is per-browser per-origin: it doesn't sync across machines, and clearing site data wipes it.
 
 ### Local stdio agents (desktop)
 
@@ -154,7 +164,7 @@ Both `ws://` (cleartext, for LAN / Dev Tunnels) and `wss://` (TLS) are accepted.
 
 ## 🌐 Connecting from your phone
 
-The mobile build can only talk to remote agents (no subprocess on iOS / Android), so you need to expose a local stdio agent over a network endpoint. The recommended bridge is [`@rebornix/stdio-to-ws`](https://www.npmjs.com/package/@rebornix/stdio-to-ws), which speaks ACP-over-WebSocket on one end and stdio on the other.
+The mobile and web builds can only talk to remote agents (no subprocess in a phone or browser sandbox), so you need to expose a local stdio agent over a network endpoint. The recommended bridge is [`@rebornix/stdio-to-ws`](https://www.npmjs.com/package/@rebornix/stdio-to-ws), which speaks ACP-over-WebSocket on one end and stdio on the other. The same setup works for the web build at [acp-ui.github.io](https://acp-ui.github.io/) — with one extra rule: the HTTPS page can only open `wss://` URLs (see [HTTPS pages must use `wss://`](#browser-only-https-pages-must-use-wss) below).
 
 ### Same Wi-Fi (LAN)
 
@@ -192,7 +202,7 @@ devtunnel host -p 3000
 https://<id>-3000.<region>.devtunnels.ms
 ```
 
-Use the **`wss://...devtunnels.ms/`** form (replace `https` with `wss`) as the agent URL in ACP UI on the phone.
+Use the **`wss://...devtunnels.ms/`** form (replace `https` with `wss`) as the agent URL in ACP UI on the phone or in the [web app](https://acp-ui.github.io/).
 
 #### Stable URL across restarts
 
@@ -210,6 +220,20 @@ devtunnel host my-acp
 
 Reference: [Dev Tunnels CLI commands](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/cli-commands).
 
+#### Browser-only: HTTPS pages must use `wss://`
+
+When you open ACP UI in a browser at [acp-ui.github.io](https://acp-ui.github.io/), the page is served over HTTPS, and the browser blocks plain `ws://` connections (mixed-content rule). Two options:
+
+- **Easy:** front your bridge with a `wss://` URL (Dev Tunnels above gives you one for free).
+- **LAN-only:** serve the bundle locally instead of the hosted site:
+
+  ```sh
+  git clone https://github.com/formulahendry/acp-ui.git
+  cd acp-ui && npm install && npm run preview:web
+  ```
+
+  then open `http://localhost:4173/` and add a `ws://<LAN IP>:3000/` agent as usual.
+
 #### Why `--persist --grace-period -1`?
 
 Mobile OSes freeze backgrounded apps within seconds, dropping the WebSocket. `--persist` tells the bridge to keep the wrapped agent alive across disconnects, and `--grace-period -1` makes that timeout infinite. When ACP UI on the phone returns to the foreground, it transparently reattaches via `session/load` and your conversation resumes. Without persistence, you'd lose the running agent every time you switched apps.
@@ -218,8 +242,8 @@ Mobile OSes freeze backgrounded apps within seconds, dropping the WebSocket. `--
 
 ## 📖 Usage
 
-1. **Select an Agent** — Choose from the dropdown in the sidebar (☰ on mobile).
-2. **Set Working Directory** — Pick a folder on desktop, or type an absolute path on mobile. The path is interpreted on the **agent's host**, not the phone.
+1. **Select an Agent** — Choose from the dropdown in the sidebar (☰ on mobile / narrow web).
+2. **Set Working Directory** — Pick a folder on desktop, or type an absolute path on mobile / web. The path is interpreted on the **agent's host**, not your device.
 3. **Create Session** — Tap **New Session** to start chatting.
 4. **Use Slash Commands** — Type `/` to see available commands.
 5. **Resume Sessions** — Tap a saved session in the sidebar to resume.
@@ -242,7 +266,7 @@ cd acp-ui
 # Install dependencies
 npm install
 
-# Run in development mode
+# Run in development mode (Tauri desktop)
 npm run tauri dev
 ```
 
@@ -251,6 +275,23 @@ npm run tauri dev
 ```bash
 npm run tauri build
 ```
+
+### Building / running the web app
+
+The web app uses the same Vue 3 frontend, with the Tauri runtime swapped out for browser-native APIs (WebSocket, `localStorage`). It only supports remote agents over `ws://` / `wss://`.
+
+```sh
+# Dev server with HMR (default port 5173)
+npm run dev:web
+
+# Production build → dist-web/
+npm run build:web
+
+# Serve dist-web/ locally to verify the production bundle
+npm run preview:web
+```
+
+The live deployment at [acp-ui.github.io](https://acp-ui.github.io/) is published from `dist-web/` by [.github/workflows/deploy-web.yml](.github/workflows/deploy-web.yml) on every push to `main`.
 
 ### Building for Android
 
