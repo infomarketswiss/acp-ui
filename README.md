@@ -12,7 +12,7 @@ A modern, cross-platform client for the [Agent Client Protocol (ACP)](https://ag
 
 No install required — open **[https://acp-ui.github.io/](https://acp-ui.github.io/)** and connect to a remote ACP agent over WebSocket. The web build supports the same chat, sessions, permissions, and traffic-monitor features as the desktop and mobile apps; it only omits local stdio agents and host filesystem access (which require a local subprocess and aren't available in a browser tab).
 
-> Pages served over HTTPS can only open `wss://` URLs (browser mixed-content rule). For LAN `ws://` access, run the bundle locally (`npm run preview:web`) or use a `wss://` tunnel — see [Connecting from your phone](#-connecting-from-your-phone), the same setup works for the web build.
+> Pages served over HTTPS can only open `wss://` URLs (browser mixed-content rule). For LAN `ws://` access, run the bundle locally (`npm run preview:web`) or use a `wss://` tunnel — see [Connecting from your phone or browser](#-connecting-from-your-phone-or-browser), the same setup works for the web build.
 
 ## 📥 Installation
 
@@ -29,7 +29,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 | **Android** | [.apk](https://github.com/formulahendry/acp-ui/releases/latest) — sideload via "Install unknown apps" |
 | **iOS** | Build from source (see [Building for iOS](#building-for-ios)) — no prebuilt binary |
 
-> Mobile and web builds connect to remote agents over WebSocket. See [Connecting from your phone](#-connecting-from-your-phone) for how to expose a local agent so a phone or browser can reach it.
+> Mobile and web builds connect to remote agents over WebSocket. See [Connecting from your phone or browser](#-connecting-from-your-phone-or-browser) for how to expose a local agent so a phone or browser can reach it.
 
 ## ✨ Features
 
@@ -162,7 +162,7 @@ Both `ws://` (cleartext, for LAN / Dev Tunnels) and `wss://` (TLS) are accepted.
 
 > **Note**: Filesystem RPCs (`fs/read_text_file`, `fs/write_text_file`) respond with JSON-RPC `-32601 Method not found` for remote agents. The agent operates on its own host's filesystem at the path you set as the working directory.
 
-## 🌐 Connecting from your phone
+## 🌐 Connecting from your phone or browser
 
 The mobile and web builds can only talk to remote agents (no subprocess in a phone or browser sandbox), so you need to expose a local stdio agent over a network endpoint. The recommended bridge is [`@rebornix/stdio-to-ws`](https://www.npmjs.com/package/@rebornix/stdio-to-ws), which speaks ACP-over-WebSocket on one end and stdio on the other. The same setup works for the web build at [acp-ui.github.io](https://acp-ui.github.io/) — with one extra rule: the HTTPS page can only open `wss://` URLs (see [HTTPS pages must use `wss://`](#browser-only-https-pages-must-use-wss) below).
 
