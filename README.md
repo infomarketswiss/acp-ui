@@ -160,7 +160,7 @@ For agents running on another machine — or for connecting from a phone to an a
 
 Both `ws://` (cleartext, for LAN / Dev Tunnels) and `wss://` (TLS) are accepted. `Authorization: Bearer <token>` is propagated as a WebSocket subprotocol because browser/WebView WebSocket APIs cannot set custom HTTP headers.
 
-> **Note**: Filesystem RPCs (`fs/read_text_file`, `fs/write_text_file`) respond with JSON-RPC `-32601 Method not found` for remote agents. The agent operates on its own host's filesystem at the path you set as the working directory.
+> **Note**: Filesystem RPCs (`fs/read_text_file`, `fs/write_text_file`) are only available on Tauri desktop (Windows, macOS, Linux). On mobile and web clients the capabilities are advertised as `false` and any incoming `fs/*` request from the agent is rejected with JSON-RPC `-32601 Method not found`. For remote agents the working directory path is interpreted on the **agent's host**, not on the client device.
 
 ## 🌐 Connecting from your phone or browser
 
