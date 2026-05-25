@@ -31,6 +31,19 @@ Download the latest release for your platform from [GitHub Releases](https://git
 
 > Mobile and web builds connect to remote agents over WebSocket. See [Connecting from your phone or browser](#-connecting-from-your-phone-or-browser) for how to expose a local agent so a phone or browser can reach it.
 
+### macOS first-launch note
+
+The macOS `.dmg` builds are ad-hoc signed but **not** notarized (no paid Apple Developer account), so on first launch macOS shows a dialog like *"Apple could not verify acp-ui is free of malware."* The app is not damaged — this is Gatekeeper's standard warning for un-notarized apps. Easiest fix, run once after installing or upgrading:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/acp-ui.app
+```
+
+Then open the app normally. Alternatives if you'd rather not use the terminal:
+
+- **macOS 15 Sequoia and later** — open **System Settings → Privacy & Security**, scroll to the bottom, click **Open Anyway** next to the acp-ui entry, authenticate, then re-launch the app.
+- **macOS 14 Sonoma and earlier** — right-click (or Control-click) `acp-ui.app` in Finder → **Open** → click **Open** in the follow-up dialog.
+
 ## ✨ Features
 
 - **Multi-Agent Support** — Connect to any ACP-compatible agent
